@@ -1,0 +1,21 @@
+{
+  "name": "cv-generator",
+  "version": "1.0.0",
+  "description": "CV Generator Flask Application",
+  "main": "index.js",
+  "scripts": {
+    "start": "python app.py",
+    "dev": "python app.py",
+    "build": "echo 'This is a Flask application, no build step required'"
+  },
+  "keywords": [
+    "cv",
+    "resume",
+    "flask",
+    "python"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {}
+}
