@@ -10,6 +10,12 @@
 <div class="container">
 
   <h1 class="mb-4">Votre CV</h1>
+  
+  <div class="mb-4">
+    <a href="{{ url_for('import_cv') }}" class="btn btn-outline-primary">
+      <i class="bi bi-upload"></i> Importer un CV existant (DOCX/PDF)
+    </a>
+  </div>
 
   <form method="post" enctype="multipart/form-data">
 
@@ -25,12 +31,13 @@
             <input type="{{ 'text' if f.type in ['phone','text'] else f.type }}"
                    class="form-control"
                    name="{{ f.id }}"
+                   value="{{ data[f.id] if data is defined and f.id in data else '' }}"
                    {% if f.required %}required{% endif %}>
 
           {% elif f.type == 'textarea' %}
             <textarea class="form-control" rows="4"
                       name="{{ f.id }}"
-                      {% if f.required %}required{% endif %}></textarea>
+                      {% if f.required %}required{% endif %}>{{ data[f.id] if data is defined and f.id in data else '' }}</textarea>
 
           {% elif f.type == 'file' %}
             <input type="file"   class="form-control"
@@ -40,20 +47,39 @@
           {# ---------- Tableau répétable (array) #}
           {% elif f.type == 'array' %}
             <div id="{{ f.id }}-wrapper" class="mb-2">
-              <!-- première ligne index 0 -->
-              <div class="repeater-row mb-2">
-                {% for subid, sub in f.item.items() %}
-                  <label class="form-label mt-2">{{ sub.label or subid|title }}</label>
-                  {% if sub.type == 'textarea' %}
-                    <textarea class="form-control"
-                              name="{{ f.id }}[0][{{ subid }}]"></textarea>
-                  {% else %}
-                    <input class="form-control"
-                           type="text"
-                           name="{{ f.id }}[0][{{ subid }}]">
-                  {% endif %}
+              {% if data is defined and f.id in data and data[f.id]|length > 0 %}
+                {% for item in data[f.id] %}
+                  <div class="repeater-row mb-2">
+                    {% for subid, sub in f.item.items() %}
+                      <label class="form-label mt-2">{{ sub.label or subid|title }}</label>
+                      {% if sub.type == 'textarea' %}
+                        <textarea class="form-control"
+                                  name="{{ f.id }}[{{ loop.parent.loop.index0 }}][{{ subid }}]">{{ item[subid] if subid in item else '' }}</textarea>
+                      {% else %}
+                        <input class="form-control"
+                               type="text"
+                               name="{{ f.id }}[{{ loop.parent.loop.index0 }}][{{ subid }}]"
+                               value="{{ item[subid] if subid in item else '' }}">
+                      {% endif %}
+                    {% endfor %}
+                  </div>
                 {% endfor %}
-              </div>
+              {% else %}
+                <!-- première ligne index 0 -->
+                <div class="repeater-row mb-2">
+                  {% for subid, sub in f.item.items() %}
+                    <label class="form-label mt-2">{{ sub.label or subid|title }}</label>
+                    {% if sub.type == 'textarea' %}
+                      <textarea class="form-control"
+                                name="{{ f.id }}[0][{{ subid }}]"></textarea>
+                    {% else %}
+                      <input class="form-control"
+                             type="text"
+                             name="{{ f.id }}[0][{{ subid }}]">
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
             </div>
             <button type="button" class="btn btn-outline-secondary btn-sm"
                     onclick="addRow('{{ f.id }}')">+ Ajouter</button>
@@ -73,7 +99,7 @@ function addRow(id){
   const index=wrap.querySelectorAll('.repeater-row').length;
   const clone=wrap.querySelector('.repeater-row').cloneNode(true);
   clone.querySelectorAll('[name]').forEach(el=>{
-      el.name=el.name.replace(/\\[\\d+]/, '['+index+']');
+      el.name=el.name.replace(/\[\d+\]/, '['+index+']');
       el.value='';
   });
   wrap.appendChild(clone);

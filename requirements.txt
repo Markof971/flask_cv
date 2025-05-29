@@ -1,3 +1,6 @@
 flask
 openai==0.28
 jinja2
+python-docx
+pdfminer.six
+nltk
