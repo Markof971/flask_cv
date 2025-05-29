@@ -3,23 +3,102 @@
 <head>
   <title>Choose CV Template</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    .header {
+      background-color: #4a6fdc;
+      color: white;
+      padding: 3rem 0;
+      margin-bottom: 3rem;
+      border-radius: 0 0 10px 10px;
+    }
+    .template-card {
+      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      margin-bottom: 2rem;
+    }
+    .template-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .card-img-top {
+      height: 300px;
+      object-fit: cover;
+      border-bottom: 1px solid #eee;
+    }
+    .btn-select {
+      background-color: #4a6fdc;
+      border-color: #4a6fdc;
+    }
+    .btn-select:hover {
+      background-color: #3a5fc9;
+      border-color: #3a5fc9;
+    }
+    .footer {
+      margin-top: 4rem;
+      padding: 2rem 0;
+      background-color: #f1f3f5;
+      border-top: 1px solid #dee2e6;
+    }
+  </style>
 </head>
-<body class="p-5">
+<body>
+  <div class="header text-center">
+    <div class="container">
+      <h1 class="display-4"><i class="bi bi-file-earmark-person"></i> CV Generator</h1>
+      <p class="lead">Créez un CV professionnel en quelques minutes</p>
+    </div>
+  </div>
+
   <div class="container">
-    <h1 class="mb-4">Choose your CV template</h1>
+    <div class="row mb-4">
+      <div class="col-md-8 mx-auto text-center">
+        <h2>Choisissez votre modèle de CV</h2>
+        <p class="text-muted">Sélectionnez un design qui correspond à votre style et à votre secteur d'activité</p>
+      </div>
+    </div>
+
     <div class="row">
       {% for t in templates %}
-      <div class="col-md-4 mb-4">
-        <div class="card h-100 shadow-sm">
+      <div class="col-md-6 col-lg-4">
+        <div class="card h-100 shadow-sm template-card">
           <img src="{{ url_for('static', filename=t.image) }}" class="card-img-top" alt="{{ t.name }}">
           <div class="card-body">
             <h5 class="card-title">{{ t.name }}</h5>
-            <a href="{{ url_for('select_template', template_id=t.id) }}" class="btn btn-primary w-100">Select</a>
+            <p class="card-text text-muted">Un design professionnel adapté à tous les secteurs</p>
+            <a href="{{ url_for('select_template', template_id=t.id) }}" class="btn btn-select btn-primary w-100">
+              <i class="bi bi-check-circle"></i> Sélectionner
+            </a>
           </div>
         </div>
       </div>
       {% endfor %}
     </div>
+    
+    <div class="row mt-5">
+      <div class="col-md-8 mx-auto">
+        <div class="card bg-light">
+          <div class="card-body">
+            <h3><i class="bi bi-lightbulb"></i> Comment ça marche?</h3>
+            <ol class="mt-3">
+              <li class="mb-2">Choisissez un modèle de CV qui vous plaît</li>
+              <li class="mb-2">Remplissez le formulaire avec vos informations personnelles ou importez un CV existant</li>
+              <li class="mb-2">Prévisualisez et personnalisez votre CV avec notre éditeur intelligent</li>
+              <li class="mb-2">Téléchargez votre CV au format PDF prêt à l'emploi</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+  
+  <footer class="footer text-center">
+    <div class="container">
+      <p class="mb-0">© 2025 CV Generator - Créez des CV professionnels facilement</p>
+    </div>
+  </footer>
 </body>
 </html>

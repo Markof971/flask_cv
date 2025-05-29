@@ -13,6 +13,18 @@ from flask import (
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 import openai
 
+# Import libraries for CV parsing
+import docx
+from pdfminer.high_level import extract_text
+import nltk
+from nltk.tokenize import sent_tokenize, word_tokenize
+
+# Download NLTK data if not already present
+try:
+    nltk.data.find('tokenizers/punkt')
+except LookupError:
+    nltk.download('punkt')
+
 # ---------------------------------------------------------------------------
 #  Configuration
 # ---------------------------------------------------------------------------
@@ -126,6 +138,156 @@ def compile_pdf(tex_source: str, build_dir: Path, tex_name: str = "main.tex") ->
     return build_dir / f"{tex_file.stem}.pdf"
 
 # ---------------------------------------------------------------------------
+#  CV Import Functions ------------------------------------------------------
+# ---------------------------------------------------------------------------
+
+def extract_text_from_docx(file_path):
+    """Extract text from a DOCX file."""
+    doc = docx.Document(file_path)
+    full_text = []
+    for para in doc.paragraphs:
+        full_text.append(para.text)
+    return '\n'.join(full_text)
+
+def extract_text_from_pdf(file_path):
+    """Extract text from a PDF file."""
+    return extract_text(file_path)
+
+def extract_cv_data(file_path, file_ext):
+    """Extract CV data from a file based on its extension."""
+    if file_ext.lower() == '.docx':
+        text = extract_text_from_docx(file_path)
+    elif file_ext.lower() == '.pdf':
+        text = extract_text_from_pdf(file_path)
+    else:
+        raise ValueError(f"Unsupported file extension: {file_ext}")
+    
+    # Use GPT to extract structured data from the CV text
+    return gpt_extract_cv_data(text)
+
+def gpt_extract_cv_data(cv_text):
+    """Use GPT to extract structured data from CV text."""
+    if not openai.api_key:
+        raise RuntimeError("OPENAI_API_KEY required for CV data extraction")
+    
+    system_prompt = """
+    You are a CV/resume parser. Extract structured information from the provided CV text.
+    Identify the following information:
+    - Personal details (name, email, phone, address)
+    - Professional summary/profile
+    - Work experience (job titles, companies, dates, descriptions)
+    - Education (degrees, institutions, dates)
+    - Skills
+    - Languages
+    - Certifications
+    - Personal information (citizenship, family status)
+    - Hobbies/interests
+    
+    Format your response as a JSON object with these fields. If information is not found, use empty strings or arrays.
+    """
+    
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": cv_text}
+    ]
+    
+    try:
+        response = openai.ChatCompletion.create(
+            model=OPENAI_MODEL,
+            messages=messages,
+            temperature=0.3
+        )
+        
+        result = response.choices[0].message.content.strip()
+        # Clean up the response to ensure it's valid JSON
+        result = re.sub(r"```json|```", "", result).strip()
+        
+        try:
+            parsed_data = json.loads(result)
+            return map_gpt_data_to_schema(parsed_data)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing GPT response: {e}")
+            print(f"Response was: {result}")
+            return {}
+            
+    except Exception as e:
+        print(f"Error calling GPT API: {e}")
+        return {}
+
+def map_gpt_data_to_schema(gpt_data):
+    """Map GPT extracted data to our schema format."""
+    mapped_data = {}
+    
+    # Map basic fields
+    if 'name' in gpt_data:
+        name_parts = gpt_data['name'].split(maxsplit=1)
+        if len(name_parts) > 0:
+            mapped_data['first_name'] = name_parts[0]
+        if len(name_parts) > 1:
+            mapped_data['last_name'] = name_parts[1]
+    
+    # Map contact info
+    mapped_data['email'] = gpt_data.get('email', '')
+    mapped_data['phone'] = gpt_data.get('phone', '')
+    mapped_data['address'] = gpt_data.get('address', '')
+    
+    # Map profile summary
+    mapped_data['profile_summary'] = gpt_data.get('summary', '')
+    
+    # Map personal info
+    mapped_data['citizenship'] = gpt_data.get('citizenship', '')
+    mapped_data['family'] = gpt_data.get('family_status', '')
+    mapped_data['languages'] = gpt_data.get('languages', '')
+    
+    # Map skills
+    if 'skills' in gpt_data:
+        if isinstance(gpt_data['skills'], list):
+            mapped_data['skills'] = '\n'.join(gpt_data['skills'])
+        else:
+            mapped_data['skills'] = gpt_data['skills']
+    
+    # Map work experience
+    if 'experience' in gpt_data and isinstance(gpt_data['experience'], list):
+        mapped_data['jobs'] = []
+        for exp in gpt_data['experience']:
+            job = {
+                'title': exp.get('title', ''),
+                'company': exp.get('company', ''),
+                'location': exp.get('location', ''),
+                'start_date': exp.get('start_date', ''),
+                'end_date': exp.get('end_date', ''),
+                'bullets': '\n'.join(exp.get('description', [])) if isinstance(exp.get('description', []), list) else exp.get('description', '')
+            }
+            mapped_data['jobs'].append(job)
+    
+    # Map education
+    if 'education' in gpt_data and isinstance(gpt_data['education'], list):
+        mapped_data['degrees'] = []
+        for edu in gpt_data['education']:
+            degree = {
+                'degree': edu.get('degree', ''),
+                'institution': edu.get('institution', ''),
+                'dates': f"{edu.get('start_date', '')}–{edu.get('end_date', '')}"
+            }
+            mapped_data['degrees'].append(degree)
+    
+    # Map certifications
+    if 'certifications' in gpt_data and isinstance(gpt_data['certifications'], list):
+        mapped_data['certifications'] = []
+        for cert in gpt_data['certifications']:
+            certification = {
+                'title': cert.get('title', ''),
+                'issuer': cert.get('issuer', ''),
+                'date': cert.get('date', '')
+            }
+            mapped_data['certifications'].append(certification)
+    
+    # Map hobbies
+    mapped_data['hobbies'] = gpt_data.get('hobbies', '')
+    
+    return mapped_data
+
+# ---------------------------------------------------------------------------
 #  Routes -------------------------------------------------------------------
 # ---------------------------------------------------------------------------
 
@@ -162,7 +324,53 @@ def form():
         session["cv_data"] = data
         return redirect(url_for("preview"))
 
-    return render_template("form_schema.html", schema=schema)
+    # Affichage du formulaire avec les données pré-remplies si disponibles
+    return render_template("form_schema.html", schema=schema, data=session.get("cv_data"))
+
+
+@app.route("/import", methods=["GET", "POST"])
+def import_cv():
+    if "template_id" not in session:
+        return redirect(url_for("index"))
+    
+    if request.method == "POST":
+        if 'cv_file' not in request.files:
+            flash("Aucun fichier sélectionné", "danger")
+            return redirect(url_for("import_cv"))
+        
+        cv_file = request.files['cv_file']
+        if cv_file.filename == '':
+            flash("Aucun fichier sélectionné", "danger")
+            return redirect(url_for("import_cv"))
+        
+        # Save the uploaded file
+        file_ext = os.path.splitext(cv_file.filename)[1]
+        if file_ext.lower() not in ['.docx', '.pdf']:
+            flash("Format de fichier non supporté. Veuillez télécharger un fichier DOCX ou PDF.", "danger")
+            return redirect(url_for("import_cv"))
+        
+        temp_file_path = os.path.join(app.config["UPLOAD_FOLDER"], f"temp_{uuid.uuid4().hex}{file_ext}")
+        os.makedirs(os.path.dirname(temp_file_path), exist_ok=True)
+        cv_file.save(temp_file_path)
+        
+        try:
+            # Extract data from the CV
+            extracted_data = extract_cv_data(temp_file_path, file_ext)
+            
+            # Store the extracted data in session
+            session["cv_data"] = extracted_data
+            
+            # Clean up the temporary file
+            os.remove(temp_file_path)
+            
+            flash("Données extraites avec succès! Veuillez vérifier et compléter si nécessaire.", "success")
+            return redirect(url_for("form"))
+            
+        except Exception as e:
+            flash(f"Erreur lors de l'extraction des données: {str(e)}", "danger")
+            return redirect(url_for("import_cv"))
+    
+    return render_template("import.html")
 
 
 @app.route("/preview")
